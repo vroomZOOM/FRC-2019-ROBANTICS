@@ -40,17 +40,19 @@ import edu.wpi.first.wpilibj.Ultrasonic;
 public class Robot extends IterativeRobot {
 
 	Command autoCommand;
-
-	DigitalInput liftswitch = new DigitalInput(0);
-	DigitalInput liftDown = new DigitalInput(1);
-
+	/****************************************************************************************************/
+	DigitalInput liftswitch1 = new DigitalInput(0);//elevator limit switch code
+	DigitalInput liftswitch2 = new DigitalInput(1);//NOTE: if IR sensors are used, True is when the sensor is NOT tripped
+	DigitalInput liftswitch3 = new DigitalInput(2);
+	DigitalInput liftDown = new DigitalInput(3);
+	/****************************************************************************************************/
 	SendableChooser<Integer> teamStatus;
 	SendableChooser<Integer> autoPlay;
 	/****************************************************************************************************/
-	protected DifferentialDrive m_myRobot;
+	protected DifferentialDrive m_myRobot; // basic driving variables
 	protected Joystick driverstick = new Joystick(0);
 	/****************************************************************************************************/
-	protected Compressor c = new Compressor(0);
+	protected Compressor c = new Compressor(0); // pneumatics control variables
 	Solenoid shootSolenoid = new Solenoid(0);
 	Solenoid retractSolenoid = new Solenoid(1);
 	Solenoid Deploy = new Solenoid(2);
@@ -60,11 +62,17 @@ public class Robot extends IterativeRobot {
 	/****************************************************************************************************/
 	private static I2C Wire = new I2C(Port.kOnboard, 1);// slave I2C device address 1 (rio is master)
 	private static I2C Wire1 = new I2C(Port.kOnboard, 2);
+	byte[] i2cbuffer = new byte[8];
 	/****************************************************************************************************/
-	TalonSRX liftTalon = new TalonSRX(1);
-
+	boolean auto; // auto run variables
+	double turnSpeed;
+	Ultrasonic sensor = new Ultrasonic(4, 5);//ping, then echo
+	/****************************************************************************************************/
+	TalonSRX liftTalon = new TalonSRX(1); // elevator control variables
 	boolean lifting;
-	boolean liftUp;
+	boolean lift1;
+	boolean lift2;
+	boolean lift3;
 	boolean lifterDown;
 
 	@Override
@@ -72,34 +80,58 @@ public class Robot extends IterativeRobot {
 
 		Spark m_left0 = new Spark(0); // motors are plugged into ports 0,1,2,3 into the roborio
 		Spark m_left1 = new Spark(1);
-		SpeedControllerGroup m_left = new SpeedControllerGroup(m_left0, m_left1);// motor 0 and 1 are the left side
-																					// motors
+		SpeedControllerGroup m_left = new SpeedControllerGroup(m_left0, m_left1);// motor 0 and 1 are the left side motors
+																					
 		Spark m_right2 = new Spark(2);
 		Spark m_right3 = new Spark(3);
-		SpeedControllerGroup m_right = new SpeedControllerGroup(m_right2, m_right3);// motor 2 and 3 are the right side
-																					// motors
-		m_myRobot = new DifferentialDrive(m_left, m_right); // new differential drive - another can be created for
-															// another set of wheels
+		SpeedControllerGroup m_right = new SpeedControllerGroup(m_right2, m_right3);// motor 2 and 3 are the right side motors
+																					
+		m_myRobot = new DifferentialDrive(m_left, m_right); // new differential drive - another can be created for another set of wheels
+														
 
 		c.setClosedLoopControl(true);// start the compressor
 
 		m_myRobot.arcadeDrive(0, 0);// set drivetrain to 0 movement
-
+		boolean auto = false;
+		turnSpeed = 0;
+		sensor.setAutomaticMode(true);
 	}
 
 	@Override
 	public void autonomousInit() {
-
+		turnSpeed = 0;
 	}
 
 	@Override
 	public void autonomousPeriodic() {
 
+		Wire.read(1, 1, i2cbuffer);
+		double servoangle = Math.abs(i2cbuffer[0]);
+		double driveAngle = (servoangle - 158) / 45;
+
+		System.out.println(servoangle);
+
+		m_myRobot.arcadeDrive(0.6, turnSpeed);
+
+		turnSpeed = driveAngle;
+
+		if (turnSpeed > 0.6) {
+			turnSpeed = 0.6;
+		}
+		if (turnSpeed < -0.6) {
+			turnSpeed = -0.6;
+		}
 	}
 
 	@Override
 	public void teleopInit() {
 		CameraServer.getInstance().startAutomaticCapture();// start the camera
+		turnSpeed = 0;
+		lifting = false;
+		lift1 = true;
+		lift2 = true;
+		lift3 = true;
+		
 	}
 
 	@Override
@@ -112,37 +144,109 @@ public class Robot extends IterativeRobot {
 		boolean motortest = driverstick.getRawButton(3);
 		boolean sendymabob = driverstick.getRawButton(4);
 		boolean sendoff = driverstick.getRawButton(6);
-
+		boolean autoRun = driverstick.getTrigger();
 		boolean liftInit = driverstick.getRawButton(5);
+		double speed = 0.6;
 
 		shootSolenoid.set(false);
 		retractSolenoid.set(true);
+		System.out.println(lifting);
 
-		liftTalon.set(ControlMode.PercentOutput, 0);
-		liftUp = false;
+		lift1 = true;
+		lift2 = true;
+		lift3 = true;
+		lifterDown = false;
+	
 
-		m_myRobot.arcadeDrive(driverstick.getX() * robotSpeed * stickReverse, driverstick.getY() * robotSpeed);// drive
-																												// the
-																												// bot
+		m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
+
+		double range = sensor.getRangeInches();
+
+		//System.out.println(lifting);
+
+		//liftTalon.set(ControlMode.PercentOutput, 0);
+
+	
+
+		
+
+		if (autoRun == true) {
+
+			Wire.read(1, 1, i2cbuffer);
+
+			
+
+			double servoangle = Math.abs(i2cbuffer[0]);
+			double driveAngle = (servoangle - 100)/-30;
+
+			
+
+			m_myRobot.arcadeDrive(0.6, turnSpeed);
+
+			turnSpeed = driveAngle;
+
+			if (turnSpeed > 0.6) {
+				turnSpeed = 0.6;
+			}
+			if (turnSpeed < -0.6) {
+				turnSpeed = -0.6;
+			}
+
+		}
+
 		/****************************************************************************************************/
-		if (liftInit) {
+		if (liftInit == true) {     //elevator code
+			
 			lifting = !lifting;
+			
+			m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
+
+			Timer.delay(0.2);
+		
 		}
 
 		if (liftDown.get()) {
-			lifterDown = true;
-		}
-		if (liftswitch.get()) {
-			liftUp = true;
+			lifterDown = false;
 		}
 
-		while (lifting && liftUp == false) {
-			liftTalon.set(ControlMode.PercentOutput, 1);
+		if (liftswitch1.get()) {
+
+			lift1 = false;//AKA no object
+
 		}
 
-		while (lifting = false && lifterDown) {
-			liftTalon.set(ControlMode.PercentOutput, 1);
+		if (liftswitch2.get()) {
+
+			lift2 = false;
+
 		}
+		if (liftswitch3.get()) {
+
+			lift3 = false;
+
+		}
+
+		if (lifting && lift3 == false) {//if lift operation is initialized and level 3 not reached
+
+			liftTalon.set(ControlMode.PercentOutput, 1);//wind er up
+		}
+
+		if (lifting == false && lifterDown == false) {//if lift button is pushed again, and the lifter has not yet reached the bottom
+
+			liftTalon.set(ControlMode.PercentOutput, -1);
+
+		}
+		
+		if (lifting == false && lifterDown) {
+
+			liftTalon.set(ControlMode.PercentOutput, 0);
+		}
+
+		if (lifting && lift3) {
+
+			liftTalon.set(ControlMode.PercentOutput, 0);
+		}
+		
 		/****************************************************************************************************/
 
 		// code for reversing drive direction
@@ -174,7 +278,7 @@ public class Robot extends IterativeRobot {
 
 		if (motortest == true) {
 
-			liftTalon.set(ControlMode.PercentOutput, 1);
+			 liftTalon.set(ControlMode.PercentOutput, 1);
 		}
 		/****************************************************************************************************/
 
@@ -186,6 +290,7 @@ public class Robot extends IterativeRobot {
 			Wire.write(1, 0);
 
 		}
+
 		/****************************************************************************************************/
 
 	}

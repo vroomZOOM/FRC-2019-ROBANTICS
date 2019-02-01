@@ -36,15 +36,18 @@ import edu.wpi.first.wpilibj.I2C.Port;
 import edu.wpi.first.wpilibj.SerialPort;
 import edu.wpi.first.wpilibj.Servo;
 import edu.wpi.first.wpilibj.Ultrasonic;
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
 public class Robot extends IterativeRobot {
 
 	Command autoCommand;
 	/****************************************************************************************************/
-	DigitalInput liftswitch1 = new DigitalInput(0);//elevator limit switch code
-	DigitalInput liftswitch2 = new DigitalInput(1);//NOTE: if IR sensors are used, True is when the sensor is NOT tripped
-	DigitalInput liftswitch3 = new DigitalInput(2);
-	DigitalInput liftDown = new DigitalInput(3);
+	DigitalInput l_liftswitch1 = new DigitalInput(0);// elevator limit switch code
+	DigitalInput l_liftswitch2 = new DigitalInput(1);// NOTE: if IR sensors are used, True is when the sensor is NOT
+														// tripped
+	DigitalInput l_liftswitch3 = new DigitalInput(2);
+	DigitalInput l_liftDown = new DigitalInput(3);
 	/****************************************************************************************************/
 	SendableChooser<Integer> teamStatus;
 	SendableChooser<Integer> autoPlay;
@@ -52,11 +55,11 @@ public class Robot extends IterativeRobot {
 	protected DifferentialDrive m_myRobot; // basic driving variables
 	protected Joystick driverstick = new Joystick(0);
 	/****************************************************************************************************/
-	protected Compressor c = new Compressor(0); // pneumatics control variables
-	Solenoid shootSolenoid = new Solenoid(0);
-	Solenoid retractSolenoid = new Solenoid(1);
-	Solenoid Deploy = new Solenoid(2);
-	Solenoid unDeploy = new Solenoid(3);
+	protected Compressor p = new Compressor(0); // pneumatics control variables
+	Solenoid p_shootSolenoid = new Solenoid(0);
+	Solenoid p_retractSolenoid = new Solenoid(1);
+	Solenoid p_Deploy = new Solenoid(2);
+	Solenoid p_unDeploy = new Solenoid(3);
 	/****************************************************************************************************/
 	double stickReverse;// multiply by this when opposite control is needed on demand
 	/****************************************************************************************************/
@@ -66,9 +69,12 @@ public class Robot extends IterativeRobot {
 	/****************************************************************************************************/
 	boolean auto; // auto run variables
 	double turnSpeed;
-	Ultrasonic sensor = new Ultrasonic(4, 5);//ping, then echo
+	Ultrasonic s_sensor = new Ultrasonic(4, 5);// ping, then echo
 	/****************************************************************************************************/
-	TalonSRX liftTalon = new TalonSRX(1); // elevator control variables
+	TalonSRX m_liftTalon = new TalonSRX(1); // elevator control variables
+	private static final int liftDeviceID = 2;
+	private CANSparkMax m_liftMotor;
+
 	boolean lifting;
 	boolean lift1;
 	boolean lift2;
@@ -80,21 +86,27 @@ public class Robot extends IterativeRobot {
 
 		Spark m_left0 = new Spark(0); // motors are plugged into ports 0,1,2,3 into the roborio
 		Spark m_left1 = new Spark(1);
-		SpeedControllerGroup m_left = new SpeedControllerGroup(m_left0, m_left1);// motor 0 and 1 are the left side motors
-																					
+		SpeedControllerGroup m_left = new SpeedControllerGroup(m_left0, m_left1);// motor 0 and 1 are the left side
+																					// motors
+
 		Spark m_right2 = new Spark(2);
 		Spark m_right3 = new Spark(3);
-		SpeedControllerGroup m_right = new SpeedControllerGroup(m_right2, m_right3);// motor 2 and 3 are the right side motors
-																					
-		m_myRobot = new DifferentialDrive(m_left, m_right); // new differential drive - another can be created for another set of wheels
-														
+		SpeedControllerGroup m_right = new SpeedControllerGroup(m_right2, m_right3);// motor 2 and 3 are the right side
+																					// motors
 
-		c.setClosedLoopControl(true);// start the compressor
+		m_myRobot = new DifferentialDrive(m_left, m_right); // new differential drive - another can be created for
+															// another set of wheels
+
+		p.setClosedLoopControl(true);// start the compressor
 
 		m_myRobot.arcadeDrive(0, 0);// set drivetrain to 0 movement
 		boolean auto = false;
 		turnSpeed = 0;
-		sensor.setAutomaticMode(true);
+		s_sensor.setAutomaticMode(true);
+
+		m_liftMotor = new CANSparkMax(liftDeviceID, MotorType.kBrushless);
+		m_liftMotor.set(0);
+
 	}
 
 	@Override
@@ -126,12 +138,15 @@ public class Robot extends IterativeRobot {
 	@Override
 	public void teleopInit() {
 		CameraServer.getInstance().startAutomaticCapture();// start the camera
+		
 		turnSpeed = 0;
+		m_liftTalon.set(ControlMode.PercentOutput, 0);
+
 		lifting = false;
 		lift1 = true;
 		lift2 = true;
 		lift3 = true;
-		
+
 	}
 
 	@Override
@@ -148,38 +163,25 @@ public class Robot extends IterativeRobot {
 		boolean liftInit = driverstick.getRawButton(5);
 		double speed = 0.6;
 
-		shootSolenoid.set(false);
-		retractSolenoid.set(true);
-		System.out.println(lifting);
+		double range = s_sensor.getRangeInches();
+
+		p_shootSolenoid.set(false);
+		p_retractSolenoid.set(true);
 
 		lift1 = true;
 		lift2 = true;
 		lift3 = true;
 		lifterDown = false;
-	
 
 		m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
 
-		double range = sensor.getRangeInches();
-
-		//System.out.println(lifting);
-
-		//liftTalon.set(ControlMode.PercentOutput, 0);
-
-	
-
-		
-
+		/****************************************************************************************************/
 		if (autoRun == true) {
 
 			Wire.read(1, 1, i2cbuffer);
 
-			
-
 			double servoangle = Math.abs(i2cbuffer[0]);
-			double driveAngle = (servoangle - 100)/-30;
-
-			
+			double driveAngle = (servoangle - 100) / -30;
 
 			m_myRobot.arcadeDrive(0.6, turnSpeed);
 
@@ -188,6 +190,7 @@ public class Robot extends IterativeRobot {
 			if (turnSpeed > 0.6) {
 				turnSpeed = 0.6;
 			}
+
 			if (turnSpeed < -0.6) {
 				turnSpeed = -0.6;
 			}
@@ -195,58 +198,61 @@ public class Robot extends IterativeRobot {
 		}
 
 		/****************************************************************************************************/
-		if (liftInit == true) {     //elevator code
-			
+		if (liftInit == true) { // elevator lift operation initialization
+
 			lifting = !lifting;
-			
+
 			m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
 
 			Timer.delay(0.2);
-		
+
 		}
 
-		if (liftDown.get()) {
+		/****************************************************************************************************/
+
+		if (l_liftDown.get()) { // checking the switches to determine elevator position
 			lifterDown = false;
 		}
 
-		if (liftswitch1.get()) {
+		if (l_liftswitch1.get()) {
 
-			lift1 = false;//AKA no object
+			lift1 = false;// AKA no object
 
 		}
 
-		if (liftswitch2.get()) {
+		if (l_liftswitch2.get()) {
 
 			lift2 = false;
 
 		}
-		if (liftswitch3.get()) {
+		if (l_liftswitch3.get()) {
 
 			lift3 = false;
 
 		}
 
-		if (lifting && lift3 == false) {//if lift operation is initialized and level 3 not reached
+		/****************************************************************************************************/
 
-			liftTalon.set(ControlMode.PercentOutput, 1);//wind er up
+		if (lifting && lift3 == false) {// if lift operation is initialized and level 3 not reached
+
+			m_liftTalon.set(ControlMode.PercentOutput, 1);// wind er up
 		}
 
-		if (lifting == false && lifterDown == false) {//if lift button is pushed again, and the lifter has not yet reached the bottom
+		if (lifting == false && lifterDown == false) {// if lift button is pushed again, and the lifter has not down
 
-			liftTalon.set(ControlMode.PercentOutput, -1);
-
+			m_liftTalon.set(ControlMode.PercentOutput, -1);
 		}
-		
+
 		if (lifting == false && lifterDown) {
 
-			liftTalon.set(ControlMode.PercentOutput, 0);
+			m_liftTalon.set(ControlMode.PercentOutput, 0);
 		}
 
 		if (lifting && lift3) {
 
-			liftTalon.set(ControlMode.PercentOutput, 0);
+			m_liftTalon.set(ControlMode.PercentOutput, 0);
 		}
-		
+
 		/****************************************************************************************************/
 
 		// code for reversing drive direction
@@ -269,8 +275,8 @@ public class Robot extends IterativeRobot {
 
 		if (punch == true) { // code for solenoid
 
-			shootSolenoid.set(true);
-			retractSolenoid.set(false);
+			p_shootSolenoid.set(true);
+			p_retractSolenoid.set(false);
 
 			m_myRobot.arcadeDrive((driverstick.getY() * -1) * 0.7 * stickReverse, (driverstick.getX()) * 0.7);
 		}
@@ -278,11 +284,15 @@ public class Robot extends IterativeRobot {
 
 		if (motortest == true) {
 
-			 liftTalon.set(ControlMode.PercentOutput, 1);
+			m_liftMotor.set(0.5);
+		}
+
+		if (driverstick.getRawButton(11)) {
+			m_liftMotor.set(0);
 		}
 		/****************************************************************************************************/
 
-		if (sendymabob == true) {
+		if (sendymabob == true) {  // writing stuff to i2c address 1 arduino
 			Wire.write(1, 1);
 
 		}

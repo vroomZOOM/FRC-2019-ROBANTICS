@@ -21,6 +21,7 @@ import edu.wpi.first.wpilibj.CameraServer;
 import javax.swing.plaf.basic.BasicInternalFrameTitlePane.RestoreAction;
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
+import com.ctre.phoenix.motorcontrol.can.VictorSPX;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DigitalInput;
@@ -67,21 +68,17 @@ public class Robot extends IterativeRobot {
 	double turnSpeed;
 	Ultrasonic s_sensor = new Ultrasonic(0, 1);// ping, then echo
 	/****************************************************************************************************/
-	private static final int liftDeviceID = 2;
+	private static final int liftDeviceID = 0;
 	private CANSparkMax m_liftMotor;
 	private CANEncoder m_encoder;
-
-	boolean lift1;
-	boolean lift2;
-	boolean lift3;
 
 	/****************************************************************************************************/
 
 	TalonSRX m_ballIn = new TalonSRX(1); // elevator control variables
-	TalonSRX m_eject = new TalonSRX(0);
+	VictorSPX m_eject = new VictorSPX(2);
+	TalonSRX m_tilt = new TalonSRX(3);
 	boolean ballIn;
-	boolean suction;
-	boolean eject;
+	boolean diskOn;
 	boolean liftenable;
 
 	/****************************************************************************************************/
@@ -134,16 +131,12 @@ public class Robot extends IterativeRobot {
 		m_eject.set(ControlMode.PercentOutput, 0);
 		m_liftMotor.set(0);
 
-		lift1 = true;
-		lift2 = true;
-		lift3 = true;
-
 	}
 
 	@Override
 	public void teleopPeriodic() {
 
-		//notes - configure spark max and talon and victor spx CANOPEN addresses
+		// notes - configure spark max and talon and victor spx CANOPEN addresses
 
 		boolean normalDrive = driverstick.getRawButton(10); // declaring what the joystick buttons are
 		boolean revDrive = driverstick.getRawButton(12);
@@ -164,10 +157,6 @@ public class Robot extends IterativeRobot {
 		p_shootSolenoid.set(false);
 		p_retractSolenoid.set(true);
 
-		lift1 = true;
-		lift2 = true;
-		lift3 = true;
-
 		m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
 
 		/****************************************************************************************************/
@@ -176,8 +165,17 @@ public class Robot extends IterativeRobot {
 
 			ballIn = false;// AKA no object in bucket
 
+		} else {
+
+			ballIn = true;
 		}
 
+		if (b_diskOn.get()) {
+
+			diskOn = false;
+		} else {
+			diskOn = true;
+		}
 		/****************************************************************************************************/
 		if (autoRun == true && ballIn == false) { // auto ball pick up - this needs tweaking
 
@@ -218,57 +216,114 @@ public class Robot extends IterativeRobot {
 
 			}
 		}
-		
+
 		/****************************************************************************************************/
-		if (level1 == true && m_encoder.getPosition() <= 100) {
+		if (ballIn == true) {
+			if (level1 == true && m_encoder.getPosition() <= 100) {
 
-			double liftspeed = (m_encoder.getPosition() - 100) / -10;
+				double liftspeed = (m_encoder.getPosition() - 100) / -10;
 
-			if (liftspeed >= 0.7) {
-				liftspeed = 0.7;
+				if (liftspeed >= 0.7) {
+					liftspeed = 0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
+			}
+			if (level1 == true && m_encoder.getPosition() >= 100) {
+
+				m_liftMotor.set(0);
+			}
+			if (level2 == true && m_encoder.getPosition() <= 200) {
+
+				double liftspeed = (m_encoder.getPosition() - 200) / -10;
+
+				if (liftspeed >= 0.7) {
+					liftspeed = 0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
 			}
 
-			m_liftMotor.set(liftspeed);
-
-		}
-		if (level1 == true && m_encoder.getPosition() >= 100) {
-
-			m_liftMotor.set(0);
-		}
-		if (level2 == true && m_encoder.getPosition() <= 200) {
-
-			double liftspeed = (m_encoder.getPosition() - 200) / -10;
-
-			if (liftspeed >= 0.7) {
-				liftspeed = 0.7;
+			if (level2 == true && m_encoder.getPosition() >= 200) {
+				m_liftMotor.set(0);
 			}
 
-			m_liftMotor.set(liftspeed);
-
-		}
-
-		if (level2 == true && m_encoder.getPosition() >= 200) {
-			m_liftMotor.set(0);
-		}
-
-		if (level1 == false && level2 == false && level3 == false && down == false) {
-			m_liftMotor.set(0);
-		}
-
-		if (down && m_encoder.getPosition() >= 10) {
-
-			double liftspeed = (m_encoder.getPosition()) / -10;
-
-			if (liftspeed <= -0.7) {
-				liftspeed = -0.7;
+			if (level1 == false && level2 == false && level3 == false && down == false) {
+				m_liftMotor.set(0);
 			}
 
-			m_liftMotor.set(liftspeed);
+			if (down && m_encoder.getPosition() >= 10) {
 
+				double liftspeed = (m_encoder.getPosition()) / -10;
+
+				if (liftspeed <= -0.7) {
+					liftspeed = -0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
+			}
+			if (down == true && m_encoder.getPosition() <= 10) {
+				m_liftMotor.set(0);
+			}
 		}
-		if (down == true && m_encoder.getPosition() <= 10) {
-			m_liftMotor.set(0);
+
+		if (diskOn == true) {
+
+			if (level1 == true && m_encoder.getPosition() <= 100) {
+
+				double liftspeed = (m_encoder.getPosition() - 100) / -10;
+
+				if (liftspeed >= 0.7) {
+					liftspeed = 0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
+			}
+			if (level1 == true && m_encoder.getPosition() >= 100) {
+
+				m_liftMotor.set(0);
+			}
+			if (level2 == true && m_encoder.getPosition() <= 200) {
+
+				double liftspeed = (m_encoder.getPosition() - 200) / -10;
+
+				if (liftspeed >= 0.7) {
+					liftspeed = 0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
+			}
+
+			if (level2 == true && m_encoder.getPosition() >= 200) {
+				m_liftMotor.set(0);
+			}
+
+			if (level1 == false && level2 == false && level3 == false && down == false) {
+				m_liftMotor.set(0);
+			}
+
+			if (down && m_encoder.getPosition() >= 10) {
+
+				double liftspeed = (m_encoder.getPosition()) / -10;
+
+				if (liftspeed <= -0.7) {
+					liftspeed = -0.7;
+				}
+
+				m_liftMotor.set(liftspeed);
+
+			}
+			if (down == true && m_encoder.getPosition() <= 10) {
+				m_liftMotor.set(0);
+			}
 		}
+
+		
 		/****************************************************************************************************/
 
 		/****************************************************************************************************/

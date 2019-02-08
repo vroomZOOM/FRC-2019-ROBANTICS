@@ -18,9 +18,7 @@ import edu.wpi.first.wpilibj.Spark;
 import edu.wpi.first.wpilibj.command.Command;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.CameraServer;
-
 import javax.swing.plaf.basic.BasicInternalFrameTitlePane.RestoreAction;
-
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
@@ -44,7 +42,8 @@ public class Robot extends IterativeRobot {
 
 	Command autoCommand;
 	/****************************************************************************************************/
-	DigitalInput b_ballIn = new DigitalInput(0);// check for ball in bucket
+	DigitalInput b_ballIn = new DigitalInput(2);// check for ball in bucket
+	DigitalInput b_diskOn = new DigitalInput(3);
 	/****************************************************************************************************/
 	SendableChooser<Integer> teamStatus;
 	SendableChooser<Integer> autoPlay;
@@ -66,13 +65,12 @@ public class Robot extends IterativeRobot {
 	/****************************************************************************************************/
 	boolean auto; // auto run variables
 	double turnSpeed;
-	Ultrasonic s_sensor = new Ultrasonic(1, 2);// ping, then echo
+	Ultrasonic s_sensor = new Ultrasonic(0, 1);// ping, then echo
 	/****************************************************************************************************/
 	private static final int liftDeviceID = 2;
 	private CANSparkMax m_liftMotor;
 	private CANEncoder m_encoder;
 
-	boolean lifting;
 	boolean lift1;
 	boolean lift2;
 	boolean lift3;
@@ -145,10 +143,9 @@ public class Robot extends IterativeRobot {
 	@Override
 	public void teleopPeriodic() {
 
+		//notes - configure spark max and talon and victor spx CANOPEN addresses
 
-		// ATTENTION PROGRAMMERS - I HAVE THE CODE MADE TO PICK UP A BALL BUT WE NEED CODE TO PICK UP A DISK AS WELL
-
-		boolean normalDrive = driverstick.getRawButton(10);   //declaring what the joystick buttons are
+		boolean normalDrive = driverstick.getRawButton(10); // declaring what the joystick buttons are
 		boolean revDrive = driverstick.getRawButton(12);
 		double robotSpeed = (driverstick.getThrottle() + 1.0) / 2;
 		boolean punch = driverstick.getRawButton(2);
@@ -177,12 +174,12 @@ public class Robot extends IterativeRobot {
 
 		if (b_ballIn.get()) {
 
-			ballIn = false;// AKA no object in bucket 
+			ballIn = false;// AKA no object in bucket
 
 		}
 
 		/****************************************************************************************************/
-		if (autoRun == true && ballIn == false) { //auto ball pick up - this needs tweaking
+		if (autoRun == true && ballIn == false) { // auto ball pick up - this needs tweaking
 
 			liftenable = true;
 
@@ -202,48 +199,26 @@ public class Robot extends IterativeRobot {
 			if (turnSpeed < -0.6) {
 				turnSpeed = -0.6;
 			}
+			if (ballIn == true) {
 
-			if (range <= 12) {
-				m_myRobot.arcadeDrive(0.6, turnSpeed);
+				if (range <= 12) {
+					m_myRobot.arcadeDrive(0.6, turnSpeed);
 
-				m_ballIn.set(ControlMode.PercentOutput, -1);
-				m_eject.set(ControlMode.PercentOutput, -0.3);
+					m_ballIn.set(ControlMode.PercentOutput, -1);
+					m_eject.set(ControlMode.PercentOutput, -0.3);
+				}
+
+				else {
+
+					m_myRobot.arcadeDrive(0.6, turnSpeed);
+
+					m_ballIn.set(ControlMode.PercentOutput, 0);
+					m_eject.set(ControlMode.PercentOutput, 0);
+				}
+
 			}
-
-			else {
-
-				m_myRobot.arcadeDrive(0.6, turnSpeed);
-
-				m_ballIn.set(ControlMode.PercentOutput, 0);
-				m_eject.set(ControlMode.PercentOutput, 0);
-			}
-
 		}
-		/****************************************************************************************************/
-		if (autoRun == true && ballIn == true) { //same as above, but with a ball already in the bucket
-
-			liftenable = true;
-
-			Wire.read(1, 1, i2cbuffer);
-
-			double servoangle = Math.abs(i2cbuffer[0]);
-			double driveAngle = (servoangle - 90) / -30;
-
-			m_myRobot.arcadeDrive(0.6, turnSpeed);
-
-			turnSpeed = driveAngle;
-
-			if (turnSpeed > 0.6) {
-				turnSpeed = 0.6;
-			}
-
-			if (turnSpeed < -0.6) {
-				turnSpeed = -0.6;
-			}
-
-		}
-		/****************************************************************************************************/
-
+		
 		/****************************************************************************************************/
 		if (level1 == true && m_encoder.getPosition() <= 100) {
 
@@ -325,18 +300,17 @@ public class Robot extends IterativeRobot {
 		}
 		/****************************************************************************************************/
 
-		if (driverstick.getPOV() != -1){
+		if (driverstick.getPOV() != -1) {
 			m_ballIn.set(ControlMode.PercentOutput, 1);
 
 			m_eject.set(ControlMode.PercentOutput, 1);
-		}
-		else{
+		} else {
 			m_ballIn.set(ControlMode.PercentOutput, 0);
 
-			m_eject.set(ControlMode.PercentOutput, 0);	
+			m_eject.set(ControlMode.PercentOutput, 0);
 		}
-		
-		 /****************************************************************************************************/
+
+		/****************************************************************************************************/
 
 		if (sendymabob == true) { // writing stuff to i2c address 1 arduino
 			Wire.write(1, 1);

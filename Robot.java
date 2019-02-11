@@ -45,6 +45,8 @@ public class Robot extends IterativeRobot {
 	/****************************************************************************************************/
 	DigitalInput b_ballIn = new DigitalInput(2);// check for ball in bucket
 	DigitalInput b_diskOn = new DigitalInput(3);
+	DigitalInput limitUp = new DigitalInput(4);
+	DigitalInput limitDown = new DigitalInput(5);
 	/****************************************************************************************************/
 	SendableChooser<Integer> teamStatus;
 	SendableChooser<Integer> autoPlay;
@@ -80,6 +82,8 @@ public class Robot extends IterativeRobot {
 	boolean ballIn;
 	boolean diskOn;
 	boolean liftenable;
+	boolean lifttopMax;
+	boolean liftdownMin;
 
 	/****************************************************************************************************/
 
@@ -109,6 +113,10 @@ public class Robot extends IterativeRobot {
 		m_liftMotor = new CANSparkMax(liftDeviceID, MotorType.kBrushless);
 		m_encoder = m_liftMotor.getEncoder();
 		m_liftMotor.set(0);
+		m_ballIn.set(ControlMode.PercentOutput, 0);
+		m_eject.set(ControlMode.PercentOutput, 0);
+		
+
 
 	}
 
@@ -127,10 +135,7 @@ public class Robot extends IterativeRobot {
 		CameraServer.getInstance().startAutomaticCapture();// start the camera
 
 		turnSpeed = 0;
-		m_ballIn.set(ControlMode.PercentOutput, 0);
-		m_eject.set(ControlMode.PercentOutput, 0);
-		m_liftMotor.set(0);
-
+	
 	}
 
 	@Override
@@ -140,7 +145,7 @@ public class Robot extends IterativeRobot {
 
 		boolean normalDrive = driverstick.getRawButton(10); // declaring what the joystick buttons are
 		boolean revDrive = driverstick.getRawButton(12);
-		double robotSpeed = (driverstick.getThrottle() + 1.0) / 2;
+		double robotSpeed = (driverstick.getThrottle() - 1.0) / -2;
 		boolean punch = driverstick.getRawButton(2);
 		boolean level1 = driverstick.getRawButton(3);
 		boolean level2 = driverstick.getRawButton(4);
@@ -154,9 +159,13 @@ public class Robot extends IterativeRobot {
 
 		double range = s_sensor.getRangeInches();
 
+		Wire.read(1, 1, i2cbuffer);
+
+		m_liftMotor.set(0);
+
 		p_shootSolenoid.set(false);
 		p_retractSolenoid.set(true);
-
+		System.out.println(i2cbuffer[0]);
 		m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
 
 		/****************************************************************************************************/
@@ -173,18 +182,42 @@ public class Robot extends IterativeRobot {
 		if (b_diskOn.get()) {
 
 			diskOn = false;
-		} else {
+		}
+
+		else {
+
 			diskOn = true;
 		}
+
+		if (limitUp.get()) {
+
+			lifttopMax = true;
+
+		}
+
+		else {
+
+			lifttopMax = false;
+		}
+
+		if (limitDown.get()) {
+
+			liftdownMin = true;
+		}
+
+		else {
+
+			liftdownMin = false;
+		}
 		/****************************************************************************************************/
-		if (autoRun == true && ballIn == false) { // auto ball pick up - this needs tweaking
+		if (autoRun) { // auto ball pick up - this needs tweaking
 
 			liftenable = true;
 
 			Wire.read(1, 1, i2cbuffer);
 
 			double servoangle = Math.abs(i2cbuffer[0]);
-			double driveAngle = (servoangle - 90) / -30;
+			double driveAngle = (servoangle - 192) / 30;
 
 			m_myRobot.arcadeDrive(0.6, turnSpeed);
 
@@ -197,12 +230,12 @@ public class Robot extends IterativeRobot {
 			if (turnSpeed < -0.6) {
 				turnSpeed = -0.6;
 			}
-			if (ballIn == true) {
+			if (!ballIn) {
 
 				if (range <= 12) {
 					m_myRobot.arcadeDrive(0.6, turnSpeed);
 
-					m_ballIn.set(ControlMode.PercentOutput, -1);
+					m_ballIn.set(ControlMode.PercentOutput, 1);
 					m_eject.set(ControlMode.PercentOutput, -0.3);
 				}
 
@@ -217,8 +250,10 @@ public class Robot extends IterativeRobot {
 			}
 		}
 
-		/****************************************************************************************************/
-		if (ballIn == true) {
+		/****************************************************************************************************
+
+		if (!lifttopMax && !liftdownMin) {
+
 			if (level1 == true && m_encoder.getPosition() <= 100) {
 
 				double liftspeed = (m_encoder.getPosition() - 100) / -10;
@@ -254,7 +289,7 @@ public class Robot extends IterativeRobot {
 				m_liftMotor.set(0);
 			}
 
-			if (down && m_encoder.getPosition() >= 10) {
+			if (down && m_encoder.getPosition() >= 50) {
 
 				double liftspeed = (m_encoder.getPosition()) / -10;
 
@@ -270,7 +305,7 @@ public class Robot extends IterativeRobot {
 			}
 		}
 
-		if (diskOn == true) {
+		if (diskOn == true && lifttopMax == false && liftdownMin == false) {
 
 			if (level1 == true && m_encoder.getPosition() <= 100) {
 
@@ -324,20 +359,18 @@ public class Robot extends IterativeRobot {
 		}
 
 		
-		/****************************************************************************************************/
-
-		/****************************************************************************************************/
+		****************************************************************************************************/
 
 		// code for reversing drive direction
 
-		if (revDrive == true) {
+		if (revDrive) {
 
 			stickReverse = -1.0;
 			m_myRobot.arcadeDrive((driverstick.getY() * -1) * 0.7 * stickReverse, (driverstick.getX()) * 0.7);
 
 		}
 
-		if (normalDrive == true) {
+		if (normalDrive) {
 
 			stickReverse = 1;
 			m_myRobot.arcadeDrive((driverstick.getY() * -1) * 0.7 * stickReverse, (driverstick.getX()) * 0.7);
@@ -346,7 +379,7 @@ public class Robot extends IterativeRobot {
 
 		/****************************************************************************************************/
 
-		if (punch == true && ballIn == false) { // code for solenoid
+		if (punch && !ballIn) { // code for solenoid
 
 			p_shootSolenoid.set(true);
 			p_retractSolenoid.set(false);
@@ -355,10 +388,10 @@ public class Robot extends IterativeRobot {
 		}
 		/****************************************************************************************************/
 
-		if (driverstick.getPOV() != -1) {
-			m_ballIn.set(ControlMode.PercentOutput, 1);
+		if (driverstick.getRawButton(5)) {
+			m_ballIn.set(ControlMode.PercentOutput, 1.0);
 
-			m_eject.set(ControlMode.PercentOutput, 1);
+			m_eject.set(ControlMode.PercentOutput, -0.8);
 		} else {
 			m_ballIn.set(ControlMode.PercentOutput, 0);
 
@@ -367,17 +400,17 @@ public class Robot extends IterativeRobot {
 
 		/****************************************************************************************************/
 
-		if (sendymabob == true) { // writing stuff to i2c address 1 arduino
+		if (sendymabob) { // writing stuff to i2c address 1 arduino
 			Wire.write(1, 1);
 
 		}
-		if (sendoff == true) {
+		if (sendoff) {
 			Wire.write(1, 0);
 
 		}
 
 		/****************************************************************************************************/
-
+		
 	}
 
 	@Override

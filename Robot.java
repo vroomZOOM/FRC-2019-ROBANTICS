@@ -28,6 +28,7 @@ import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.buttons.Trigger;
 import edu.wpi.first.wpilibj.interfaces.Gyro;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.ADXRS450_Gyro;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.I2C;
@@ -38,10 +39,22 @@ import edu.wpi.first.wpilibj.Ultrasonic;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANEncoder;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.NetworkTableEntry;
+
 
 public class Robot extends IterativeRobot {
 
 	Command autoCommand;
+	double rpi_Turn;
+	NetworkTableEntry rpi_TurnE;
 	/****************************************************************************************************/
 	DigitalInput b_ballIn = new DigitalInput(2);// check for ball in bucket
 	DigitalInput b_diskOn = new DigitalInput(3);
@@ -76,8 +89,8 @@ public class Robot extends IterativeRobot {
 
 	/****************************************************************************************************/
 
-	TalonSRX m_ballIn = new TalonSRX(1); // elevator control variables
-	VictorSPX m_eject = new VictorSPX(2);
+	TalonSRX m_eject = new TalonSRX(1); // elevator control variables
+	VictorSPX m_ballIn = new VictorSPX(2);
 	TalonSRX m_tilt = new TalonSRX(3);
 	boolean ballIn;
 	boolean diskOn;
@@ -89,7 +102,9 @@ public class Robot extends IterativeRobot {
 
 	@Override
 	public void robotInit() {
-
+		NetworkTableInstance inst = NetworkTableInstance.getDefault();
+		NetworkTable table = inst.getTable("datatable");
+		rpi_TurnE = table.getEntry("angle");
 		Spark m_left0 = new Spark(0); // motors are plugged into ports 0,1,2,3 into the roborio
 		Spark m_left1 = new Spark(1);
 		SpeedControllerGroup m_left = new SpeedControllerGroup(m_left0, m_left1);// motor 0 and 1 are the left side
@@ -115,9 +130,14 @@ public class Robot extends IterativeRobot {
 		m_liftMotor.set(0);
 		m_ballIn.set(ControlMode.PercentOutput, 0);
 		m_eject.set(ControlMode.PercentOutput, 0);
+
 		
-
-
+		/*try {
+			server = new ChatServer(8887);
+			server.run()
+		} catch (UnknownHostException e) { // nothig lol 
+		}*/
+		 
 	}
 
 	@Override
@@ -135,18 +155,18 @@ public class Robot extends IterativeRobot {
 		CameraServer.getInstance().startAutomaticCapture();// start the camera
 
 		turnSpeed = 0;
-	
+
 	}
 
 	@Override
 	public void teleopPeriodic() {
-
+		rpi_TurnE.setDouble(rpi_Turn);
 		// notes - configure spark max and talon and victor spx CANOPEN addresses
 
 		boolean normalDrive = driverstick.getRawButton(10); // declaring what the joystick buttons are
 		boolean revDrive = driverstick.getRawButton(12);
 		double robotSpeed = (driverstick.getThrottle() - 1.0) / -2;
-		boolean punch = driverstick.getRawButton(2);
+		boolean autoLockout = driverstick.getRawButton(2);
 		boolean level1 = driverstick.getRawButton(3);
 		boolean level2 = driverstick.getRawButton(4);
 		boolean level3 = driverstick.getRawButton(6);
@@ -163,9 +183,7 @@ public class Robot extends IterativeRobot {
 
 		m_liftMotor.set(0);
 
-		p_shootSolenoid.set(false);
-		p_retractSolenoid.set(true);
-		System.out.println(i2cbuffer[0]);
+		
 		m_myRobot.arcadeDrive(driverstick.getY() * robotSpeed * stickReverse, driverstick.getX() * robotSpeed);
 
 		/****************************************************************************************************/
@@ -252,7 +270,7 @@ public class Robot extends IterativeRobot {
 
 		/****************************************************************************************************
 
-		if (!lifttopMax && !liftdownMin) {
+		if (ballIn && !lifttopMax && !liftdownMin && !autoLockout) {
 
 			if (level1 == true && m_encoder.getPosition() <= 100) {
 
@@ -300,12 +318,12 @@ public class Robot extends IterativeRobot {
 				m_liftMotor.set(liftspeed);
 
 			}
-			if (down == true && m_encoder.getPosition() <= 10) {
+			if (down == true && m_encoder.getPosition() <= 50) {
 				m_liftMotor.set(0);
 			}
 		}
 
-		if (diskOn == true && lifttopMax == false && liftdownMin == false) {
+		if (diskOn && !lifttopMax && !liftdownMin && !autoLockout) {
 
 			if (level1 == true && m_encoder.getPosition() <= 100) {
 
@@ -342,7 +360,7 @@ public class Robot extends IterativeRobot {
 				m_liftMotor.set(0);
 			}
 
-			if (down && m_encoder.getPosition() >= 10) {
+			if (down && m_encoder.getPosition() >= 50) {
 
 				double liftspeed = (m_encoder.getPosition()) / -10;
 
@@ -353,13 +371,12 @@ public class Robot extends IterativeRobot {
 				m_liftMotor.set(liftspeed);
 
 			}
-			if (down == true && m_encoder.getPosition() <= 10) {
+			if (down == true && m_encoder.getPosition() <= 50) {
 				m_liftMotor.set(0);
 			}
 		}
 
-		
-		****************************************************************************************************/
+		/****************************************************************************************************/
 
 		// code for reversing drive direction
 
@@ -378,39 +395,48 @@ public class Robot extends IterativeRobot {
 		}
 
 		/****************************************************************************************************/
-
-		if (punch && !ballIn) { // code for solenoid
-
-			p_shootSolenoid.set(true);
-			p_retractSolenoid.set(false);
-
-			m_myRobot.arcadeDrive((driverstick.getY() * -1) * 0.7 * stickReverse, (driverstick.getX()) * 0.7);
+		if (level1 && autoLockout) {
+			m_liftMotor.set(0.7);
 		}
+
+		if (level2 && autoLockout) {
+			m_liftMotor.set(-0.4);
+		}
+		if (autoLockout && !level1 && level2) {
+			m_liftMotor.set(0);
+		
 		/****************************************************************************************************/
 
-		if (driverstick.getRawButton(5)) {
-			m_ballIn.set(ControlMode.PercentOutput, 1.0);
+		if (driverstick.getRawButton(5) && autoLockout) {
+			m_ballIn.set(ControlMode.PercentOutput, -0.6);
 
 			m_eject.set(ControlMode.PercentOutput, -0.8);
-		} else {
+		} 
+		else {
 			m_ballIn.set(ControlMode.PercentOutput, 0);
 
 			m_eject.set(ControlMode.PercentOutput, 0);
 		}
-
+		/****************************************************************************************************/
+		if (level3) {
+			p_shootSolenoid.set(true);
+			p_retractSolenoid.set(false);
+		}
+		else{
+			p_shootSolenoid.set(false);
+			p_retractSolenoid.set(true);
+		}
 		/****************************************************************************************************/
 
 		if (sendymabob) { // writing stuff to i2c address 1 arduino
 			Wire.write(1, 1);
-
 		}
 		if (sendoff) {
 			Wire.write(1, 0);
-
-		}
-
+		}}
+		System.out.println(rpi_Turn);
 		/****************************************************************************************************/
-		
+
 	}
 
 	@Override

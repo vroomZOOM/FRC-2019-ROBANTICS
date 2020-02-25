@@ -8,7 +8,7 @@
 
 
 const int led = 3;
-int sendymabob[2];
+int sendymabob[2]; // Creates an array to store data. In this case, it creates 2 variables to store data
 
 
 Pixy2 pixy;
@@ -75,8 +75,8 @@ Serial.println(value);
   if (blocks == 1) {
     angleDif = map(xMove, 0, 316, -autoGain, autoGain);
 
-sendymabob[0] = angleDif;
-sendymabob[1] = 1;
+sendymabob[0] = angleDif; // Stores angleDif into the first section of the sendymabob array
+sendymabob[1] = 1; // Stores a 1 into the second section of the sendymabob array. In this case, it is enabled.
 
     
 
@@ -84,7 +84,7 @@ sendymabob[1] = 1;
 
   else {
 
-    sendymabob[1] = 0;
+    sendymabob[1] = 0; // Otherwise, sendymabob[1] is disabled
     
 //Serial.println("no ball");
   }
